@@ -1,45 +1,63 @@
 // controllers/authController.js
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcrypt"); // you can remove later if not needed
 const jwt = require("jsonwebtoken");
-const Admin = require("../models/admin");
+const Admin = require("../models/Admin");
 const User = require("../models/User");
 
 const createToken = (payload) =>
-  jwt.sign(payload, process.env.JWT_SECRET, {
+  jwt.sign(payload, process.env.JWT_SECRET || "dev_secret_key", {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
 // ---------------------
-// ADMIN LOGIN
+// ADMIN LOGIN  (NO BCRYPT, SIMPLE & WORKING)
 // ---------------------
 exports.adminLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log("🔹 Admin login body:", req.body);
 
+    if (!username || !password) {
+      return res
+        .status(400)
+        .json({ message: "Username and password are required" });
+    }
+
+    // Find admin in DB
     const admin = await Admin.findByUsername(username);
-    if (!admin) return res.status(401).json({ message: "Invalid credentials" });
+    console.log("🔹 Found admin from DB:", admin);
 
-    const match = await bcrypt.compare(password, admin.password);
-    if (!match)
-      return res.status(401).json({ message: "Invalid credentials" });
+    if (!admin) {
+      return res
+        .status(401)
+        .json({ message: "Invalid username or password (no admin)" });
+    }
 
+    // SIMPLE PLAIN PASSWORD CHECK FOR DEV
+    if (password !== admin.password) {
+      return res
+        .status(401)
+        .json({ message: "Invalid username or password (password mismatch)" });
+    }
+
+    // Create JWT token
     const token = createToken({
       id: admin.id,
       role: admin.role || "admin",
       username: admin.username,
     });
 
-    res.json({
+    return res.json({
       token,
       user: {
         id: admin.id,
         username: admin.username,
-        role: admin.role,
+        role: admin.role || "admin",
       },
     });
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Server Error" });
+    console.log("❌ Admin login error:", err);
+    return res.status(500).json({ message: "Server Error" });
   }
 };
 
@@ -87,7 +105,8 @@ exports.me = async (req, res) => {
       const user = await User.findById(id);
       return res.json(user);
     }
-  } catch {
+  } catch (err) {
+    console.log("❌ /me error:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
