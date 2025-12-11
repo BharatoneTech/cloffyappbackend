@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 require("dotenv").config({ path: "./config/.env" });
 
 const app = express();
@@ -11,10 +12,36 @@ app.use(cors());
 app.use(express.json());
 
 // -----------------------------
-// Routes
+// Static folder for uploaded images
+// -----------------------------
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// -----------------------------
+// Routes Import
 // -----------------------------
 const authRoutes = require("./routes/authRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
+const productRoutes = require("./routes/productRoutes");
+const ingredientRoutes = require("./routes/ingredientRoutes");
+const rewardRoutes = require("./routes/rewardRoutes");
+const orderRoutes = require("./routes/orderRoutes");
+const additionalIngredientRoutes = require("./routes/additionalIngredientRoutes");
+
+// -----------------------------
+// Routes Registration
+// -----------------------------
 app.use("/api/auth", authRoutes);
+app.use("/api/categories", categoryRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/ingredients", ingredientRoutes);
+app.use("/api/rewards", rewardRoutes);
+app.use("/api/orders", orderRoutes);   
+app.use("/api", additionalIngredientRoutes);
+app.use("/api/user", require("./routes/userExtrasRoutes"));
+
+
+
+
 
 // -----------------------------
 // Health Check Route

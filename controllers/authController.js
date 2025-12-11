@@ -1,5 +1,5 @@
 // controllers/authController.js
-const bcrypt = require("bcrypt"); // you can remove later if not needed
+const bcrypt = require("bcrypt"); // optional
 const jwt = require("jsonwebtoken");
 const Admin = require("../models/Admin");
 const User = require("../models/User");
@@ -9,13 +9,12 @@ const createToken = (payload) =>
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
-// ---------------------
-// ADMIN LOGIN  (NO BCRYPT, SIMPLE & WORKING)
-// ---------------------
+/* ----------------------------------------------------
+ * ADMIN LOGIN
+ * --------------------------------------------------- */
 exports.adminLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log("🔹 Admin login body:", req.body);
 
     if (!username || !password) {
       return res
@@ -23,24 +22,20 @@ exports.adminLogin = async (req, res) => {
         .json({ message: "Username and password are required" });
     }
 
-    // Find admin in DB
     const admin = await Admin.findByUsername(username);
-    console.log("🔹 Found admin from DB:", admin);
 
     if (!admin) {
       return res
         .status(401)
-        .json({ message: "Invalid username or password (no admin)" });
+        .json({ message: "Invalid username or password" });
     }
 
-    // SIMPLE PLAIN PASSWORD CHECK FOR DEV
     if (password !== admin.password) {
       return res
         .status(401)
-        .json({ message: "Invalid username or password (password mismatch)" });
+        .json({ message: "Invalid username or password" });
     }
 
-    // Create JWT token
     const token = createToken({
       id: admin.id,
       role: admin.role || "admin",
@@ -52,24 +47,24 @@ exports.adminLogin = async (req, res) => {
       user: {
         id: admin.id,
         username: admin.username,
-        role: admin.role || "admin",
+        role: "admin",
       },
     });
   } catch (err) {
-    console.log("❌ Admin login error:", err);
     return res.status(500).json({ message: "Server Error" });
   }
 };
 
-// ---------------------
-// USER LOGIN / REGISTER
-// ---------------------
+/* ----------------------------------------------------
+ * USER LOGIN / REGISTER
+ * --------------------------------------------------- */
 exports.userLoginOrRegister = async (req, res) => {
   try {
     const { contact_number, name } = req.body;
 
     let user = await User.findByContact(contact_number);
 
+    // CREATE NEW USER IF NOT EXISTS
     if (!user) {
       user = await User.create({
         name: name || "Guest",
@@ -77,36 +72,66 @@ exports.userLoginOrRegister = async (req, res) => {
       });
     }
 
+    // CREATE JWT TOKEN
     const token = createToken({
       id: user.id,
       role: "user",
-      contact_number: user.contact_number,
-      name: user.name,
     });
 
-    res.json({ token, user });
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        contact_number: user.contact_number,
+        bowl_membership: user.bowl_membership,
+        golden_membership: user.golden_membership,
+        role: "user",
+      },
+    });
   } catch (err) {
-    console.log(err);
+    console.log("❌ User login/register error:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
 
-// ---------------------
-// FETCH PROFILE
-// ---------------------
+/* ----------------------------------------------------
+ * FETCH PROFILE (/auth/me)
+ * --------------------------------------------------- */
 exports.me = async (req, res) => {
   try {
     const { id, role } = req.user;
 
+    // ADMIN
     if (role === "admin") {
       const admin = await Admin.findById(id);
-      return res.json(admin);
-    } else {
-      const user = await User.findById(id);
-      return res.json(user);
+
+      return res.json({
+        success: true,
+        user: {
+          id: admin.id,
+          username: admin.username,
+          role: "admin",
+        },
+      });
     }
+
+    // USER
+    const user = await User.findById(id);
+
+    return res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        contact_number: user.contact_number,
+        bowl_membership: user.bowl_membership,
+        golden_membership: user.golden_membership,
+        role: "user",
+      },
+    });
   } catch (err) {
-    console.log("❌ /me error:", err);
+    console.log("❌ /auth/me error:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
