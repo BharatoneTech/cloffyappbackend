@@ -21,7 +21,7 @@ function computePrices(net_price, discount, bowlmem_discount, goldenmem_discount
 }
 
 /* ============================================================
-   CREATE PRODUCT (Cloudinary Upload)
+   CREATE PRODUCT
 ============================================================== */
 exports.createProduct = async (req, res) => {
   try {
@@ -47,7 +47,7 @@ exports.createProduct = async (req, res) => {
       });
     }
 
-    const product_img = req.file ? req.file.path : null; // Cloudinary URL
+    const product_img = req.file ? req.file.path : null;
 
     const prices = computePrices(
       net_price,
@@ -89,7 +89,7 @@ exports.createProduct = async (req, res) => {
 };
 
 /* ============================================================
-   GET ALL PRODUCTS
+   GET ALL PRODUCTS (Admin)
 ============================================================== */
 exports.getAllProductsAdmin = async (req, res) => {
   try {
@@ -110,7 +110,7 @@ exports.getAllProductsAdmin = async (req, res) => {
 };
 
 /* ============================================================
-   GET PRODUCT BY ID
+   GET PRODUCT BY ID (Admin)
 ============================================================== */
 exports.getProductByIdAdmin = async (req, res) => {
   try {
@@ -132,7 +132,7 @@ exports.getProductByIdAdmin = async (req, res) => {
 };
 
 /* ============================================================
-   UPDATE PRODUCT (Cloudinary Upload)
+   UPDATE PRODUCT
 ============================================================== */
 exports.updateProduct = async (req, res) => {
   try {
@@ -208,6 +208,37 @@ exports.deleteProduct = async (req, res) => {
     res.json({ success: true, message: "Product deleted" });
   } catch (err) {
     console.error("❌ DELETE PRODUCT ERROR:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+/* ============================================================
+   BULK STATUS UPDATE BY CATEGORY (Admin)
+============================================================== */
+exports.updateStatusByCategoryAdmin = async (req, res) => {
+  try {
+    const pool = getDb();
+    const categoryId = req.params.categoryId;
+    const { status } = req.body;
+
+    if (!["ACTIVE", "INACTIVE"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status" });
+    }
+
+    const [result] = await pool.query(
+      `UPDATE products
+       SET status = ?, updated_at = NOW()
+       WHERE category_id = ?`,
+      [status, categoryId]
+    );
+
+    res.json({
+      success: true,
+      affectedRows: result.affectedRows,
+      message: `Updated all products to ${status}`,
+    });
+  } catch (err) {
+    console.error("❌ BULK STATUS UPDATE ERROR:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

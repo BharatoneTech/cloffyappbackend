@@ -1,14 +1,21 @@
 const express = require("express");
 const router = express.Router();
 
-const upload = require("../utils/multer"); // <-- Cloudinary multer
+const upload = require("../utils/multer"); // Cloudinary multer
 const CategoryController = require("../controllers/categoryController");
+
+/* ============================
+   USER ROUTES (TOP)
+============================ */
+
+// Active categories (user)
+router.get("/active/list", CategoryController.getCategories);
 
 /* ============================
    ADMIN ROUTES
 ============================ */
 
-// Create category (Cloudinary upload)
+// Create category
 router.post(
   "/",
   upload.single("image"),
@@ -18,10 +25,14 @@ router.post(
 // Get all categories (admin)
 router.get("/", CategoryController.getAllCategories);
 
+// 🔥 BULK STATUS UPDATE (ADMIN)
+router.put("/activate/all", CategoryController.activateAllCategories);
+router.put("/inactivate/all", CategoryController.inactivateAllCategories);
+
 // Get category by ID
 router.get("/:id", CategoryController.getCategoryById);
 
-// Update category (Cloudinary)
+// Update category
 router.put(
   "/:id",
   upload.single("image"),
@@ -30,12 +41,5 @@ router.put(
 
 // Delete category
 router.delete("/:id", CategoryController.deleteCategory);
-
-/* ============================
-   USER ROUTES
-============================ */
-
-// Active categories (user)
-router.get("/active/list", CategoryController.getCategories);
 
 module.exports = router;

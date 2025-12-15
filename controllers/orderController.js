@@ -27,6 +27,7 @@ exports.createOrder = async (req, res) => {
       final_amount = 0,
       items,
       transactionId,
+      applied_reward = null, // <-- optional payload from frontend
     } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -35,15 +36,66 @@ exports.createOrder = async (req, res) => {
 
     await conn.beginTransaction();
 
+    // validate applied_reward (if provided)
+    let appliedRewardId = null;
+    let appliedUserRewardId = null;
+    let appliedRewardMeta = null;
+
+    if (applied_reward) {
+      // accept either { reward_id, user_reward_id, ... } or similar shapes
+      appliedRewardId = applied_reward.reward_id ?? applied_reward.id ?? null;
+      appliedUserRewardId = applied_reward.user_reward_id ?? applied_reward.userRewardId ?? applied_reward.user_reward ?? null;
+      // keep the full object for auditing (stringify)
+      try {
+        appliedRewardMeta = JSON.stringify(applied_reward);
+      } catch (e) {
+        appliedRewardMeta = JSON.stringify({ raw: String(applied_reward) });
+      }
+
+      // If there is a user_reward_id, ensure it belongs to this user and is ACTIVE
+      if (appliedUserRewardId) {
+        const [urRows] = await conn.query(
+          `SELECT id, user_id, status FROM user_rewards WHERE id = ? LIMIT 1`,
+          [appliedUserRewardId]
+        );
+
+        if (urRows.length === 0) {
+          await conn.rollback();
+          return res.status(400).json({ message: "Invalid user_reward_id provided" });
+        }
+
+        const ur = urRows[0];
+        if (Number(ur.user_id) !== Number(userId)) {
+          await conn.rollback();
+          return res.status(403).json({ message: "This reward does not belong to the user" });
+        }
+
+        if ((ur.status || "").toUpperCase() !== "ACTIVE") {
+          await conn.rollback();
+          return res.status(400).json({ message: "Provided user reward is not active" });
+        }
+      }
+    }
+
     // 1️⃣ Create Order with unique_code + initial status PLACED
     const uniqueCode = generateUniqueCode();
 
+    // Now include new columns if present
     const [orderResult] = await conn.query(
       `
-      INSERT INTO orders (user_id, amount, gst_amount, final_amount, status, unique_code)
-      VALUES (?, ?, ?, ?, 'PLACED', ?)
+      INSERT INTO orders (user_id, amount, gst_amount, final_amount, status, unique_code, applied_reward_id, applied_user_reward_id, applied_reward_meta)
+      VALUES (?, ?, ?, ?, 'PLACED', ?, ?, ?, ?)
       `,
-      [userId, amount, gst_amount, final_amount, uniqueCode]
+      [
+        userId,
+        amount,
+        gst_amount,
+        final_amount,
+        uniqueCode,
+        appliedRewardId,
+        appliedUserRewardId,
+        appliedRewardMeta,
+      ]
     );
 
     const orderId = orderResult.insertId;
@@ -107,7 +159,25 @@ exports.createOrder = async (req, res) => {
       [orderId, userId, final_amount, gst_amount, txId]
     );
 
-    // ⭐ STAR + REWARD SYSTEM ⭐
+    // If applied_user_reward_id present -> mark it USED (ensure it is ACTIVE & belongs to user)
+    if (appliedUserRewardId) {
+      const [updateRes] = await conn.query(
+        `
+        UPDATE user_rewards
+        SET status = 'USED', updated_at = CURRENT_TIMESTAMP()
+        WHERE id = ? AND user_id = ? AND status = 'ACTIVE'
+        `,
+        [appliedUserRewardId, userId]
+      );
+
+      if (updateRes.affectedRows === 0) {
+        // reward could have been consumed by another concurrent request; treat as error
+        await conn.rollback();
+        return res.status(409).json({ message: "Unable to apply reward: already used or invalid." });
+      }
+    }
+
+    // 4️⃣ STAR + REWARD SYSTEM (unchanged behaviour, still transactional)
     let currentStars = 0;
     let newRewardGenerated = false;
 
@@ -180,6 +250,7 @@ exports.createOrder = async (req, res) => {
       stars: starInfo.length ? starInfo[0].stars : 0,
       rewards: rewardInfo[0].rewards,
       newRewardGenerated,
+      applied_reward: applied_reward ? { applied_reward_id: appliedRewardId, applied_user_reward_id: appliedUserRewardId } : null,
     });
   } catch (err) {
     await conn.rollback();
@@ -358,7 +429,6 @@ exports.getAdminOrders = async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch admin orders" });
   }
 };
-
 
 // ======================================================
 // 6️⃣ ADMIN: UPDATE ORDER STATUS

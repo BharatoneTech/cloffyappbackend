@@ -7,7 +7,8 @@ const jwtAuth = require("../middleware/jwtAuth");
 const roleGuard = require("../middleware/roleGuard");
 
 router.post("/admin/login", auth.adminLogin);
-router.post("/user/login", auth.userLoginOrRegister);
+router.post("/user/register", auth.registerUser);
+router.post("/user/login", auth.loginUser);
 router.get("/me", jwtAuth, auth.me);
 
 // Example admin-only route

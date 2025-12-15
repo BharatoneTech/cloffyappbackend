@@ -23,17 +23,12 @@ exports.adminLogin = async (req, res) => {
     }
 
     const admin = await Admin.findByUsername(username);
-
     if (!admin) {
-      return res
-        .status(401)
-        .json({ message: "Invalid username or password" });
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
     if (password !== admin.password) {
-      return res
-        .status(401)
-        .json({ message: "Invalid username or password" });
+      return res.status(401).json({ message: "Invalid username or password" });
     }
 
     const token = createToken({
@@ -56,27 +51,46 @@ exports.adminLogin = async (req, res) => {
 };
 
 /* ----------------------------------------------------
- * USER LOGIN / REGISTER
+ * USER REGISTER (PHONE + NAME REQUIRED)
  * --------------------------------------------------- */
-exports.userLoginOrRegister = async (req, res) => {
+exports.registerUser = async (req, res) => {
   try {
-    const { contact_number, name } = req.body;
+    let { contact_number, name } = req.body;
 
-    let user = await User.findByContact(contact_number);
+    // Validate phone
+    if (!contact_number) {
+      return res.status(400).json({ message: "Contact number is required" });
+    }
 
-    // CREATE NEW USER IF NOT EXISTS
-    if (!user) {
-      user = await User.create({
-        name: name || "Guest",
-        contact_number,
+    contact_number = contact_number.replace(/\D/g, "");
+    if (contact_number.length !== 10) {
+      return res.status(400).json({
+        message: "Phone number must be exactly 10 digits",
       });
     }
 
-    // CREATE JWT TOKEN
-    const token = createToken({
-      id: user.id,
-      role: "user",
+    // Validate name
+    if (!name || name.trim().length === 0) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+
+    name = name.trim();
+
+    // Check if phone exists
+    const existing = await User.findByContact(contact_number);
+    if (existing) {
+      return res.status(400).json({
+        message: `Phone number already registered with "${existing.name}". Please login.`,
+      });
+    }
+
+    // Create new user
+    const user = await User.create({
+      name,
+      contact_number,
     });
+
+    const token = createToken({ id: user.id, role: "user" });
 
     return res.json({
       token,
@@ -90,7 +104,53 @@ exports.userLoginOrRegister = async (req, res) => {
       },
     });
   } catch (err) {
-    console.log("❌ User login/register error:", err);
+    console.log("REGISTER ERROR:", err);
+    res.status(500).json({ message: "Server Error" });
+  }
+};
+
+/* ----------------------------------------------------
+ * USER LOGIN (PHONE ONLY REQUIRED)
+ * --------------------------------------------------- */
+exports.loginUser = async (req, res) => {
+  try {
+    let { contact_number } = req.body;
+
+    // Validate phone
+    if (!contact_number) {
+      return res.status(400).json({ message: "Contact number is required" });
+    }
+
+    contact_number = contact_number.replace(/\D/g, "");
+    if (contact_number.length !== 10) {
+      return res.status(400).json({
+        message: "Phone number must be exactly 10 digits",
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findByContact(contact_number);
+    if (!user) {
+      return res.status(400).json({
+        message: "Phone number not registered. Please register first.",
+      });
+    }
+
+    const token = createToken({ id: user.id, role: "user" });
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        contact_number: user.contact_number,
+        bowl_membership: user.bowl_membership,
+        golden_membership: user.golden_membership,
+        role: "user",
+      },
+    });
+  } catch (err) {
+    console.log("LOGIN ERROR:", err);
     res.status(500).json({ message: "Server Error" });
   }
 };
@@ -102,10 +162,9 @@ exports.me = async (req, res) => {
   try {
     const { id, role } = req.user;
 
-    // ADMIN
+    // Admin
     if (role === "admin") {
       const admin = await Admin.findById(id);
-
       return res.json({
         success: true,
         user: {
@@ -116,7 +175,7 @@ exports.me = async (req, res) => {
       });
     }
 
-    // USER
+    // User
     const user = await User.findById(id);
 
     return res.json({

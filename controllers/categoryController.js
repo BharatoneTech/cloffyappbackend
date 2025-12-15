@@ -67,6 +67,8 @@ exports.getCategoryById = async (req, res) => {
   }
 };
 
+
+
 /* ============================================================
    UPDATE CATEGORY (Cloudinary Upload)
 ============================================================== */
@@ -133,3 +135,48 @@ exports.getCategories = async (req, res) => {
     res.status(500).json({ message: "Server Error" });
   }
 };
+
+/* ============================================================
+   INACTIVATE ALL CATEGORIES (ADMIN)
+============================================================== */
+exports.inactivateAllCategories = async (req, res) => {
+  try {
+    const pool = getDb();
+
+    await pool.query(
+      `UPDATE categories 
+       SET status='INACTIVE', updated_at=NOW()`
+    );
+
+    res.json({
+      success: true,
+      message: "All categories set to INACTIVE",
+    });
+  } catch (err) {
+    console.error("❌ INACTIVATE ALL ERROR:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+/* ============================================================
+   ACTIVATE ALL CATEGORIES (ADMIN)
+============================================================== */
+exports.activateAllCategories = async (req, res) => {
+  try {
+    const pool = getDb();
+
+    await pool.query(
+      `UPDATE categories 
+       SET status='ACTIVE', updated_at=NOW()`
+    );
+
+    res.json({
+      success: true,
+      message: "All categories set to ACTIVE",
+    });
+  } catch (err) {
+    console.error("❌ ACTIVATE ALL ERROR:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
